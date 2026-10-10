@@ -32,15 +32,20 @@ Current typography settings, identical in both language editions:
 Edit these values in config.tex. The body multiplier is a layout choice for
 this report, not a universal publishing standard. With this 11 pt article class,
 the nominal body baseline is approximately 20.4 pt (7.2 mm).
-PDFs and fonts remain local and are excluded from Git; report sources are tracked.
+Final English/Persian main_report.pdf files and editable report sources are
+tracked in Git for publication on GitHub. Rebuild both PDFs after editing the
+reports. Downloaded fonts, rendering images, build products and datasheet PDFs
+remain excluded.
 Read ../agent-guidelines before extending either edition.
 
 ## گزارش‌های قابل‌ویرایش
 
 هر دو زبان قالب، رنگ و ساختار یکسان دارند. فایل main_report را در TeXstudio
 باز و موتور XeLaTeX را انتخاب کنید. دستورهای بالا را از پوشهٔ همان زبان اجرا
-کنید. فونت رایگان وزیر از پروژهٔ رسمی بالا قابل دریافت است؛ فونت و PDF محلی
-هستند. تنظیمات فونت، نام نویسنده و لینک‌ها در config.tex متمرکز است. پیوست کامل
+کنید. فونت رایگان وزیر از پروژهٔ رسمی بالا قابل دریافت است و محلی باقی می‌ماند.
+PDF نهایی هر دو زبان همراه سورس گزارش در Git و GitHub قرار می‌گیرد؛ پس از تغییر
+گزارش، هر دو PDF را دوباره بسازید. تنظیمات فونت، نام نویسنده و لینک‌ها در
+config.tex متمرکز است. پیوست کامل
 کد حذف شده و مثال‌های کوتاه همراه توضیح ورودی، خروجی، زمان استفاده و خطاها در
 بخش توابع قرار دارند. برای پیاده‌سازی کامل به فایل‌های کتابخانه مراجعه کنید.
 

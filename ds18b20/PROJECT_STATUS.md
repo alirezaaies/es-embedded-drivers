@@ -60,7 +60,7 @@ artifacts. Keep a raw standalone STM32F107 foundation for later projects.
   App hooks, IOC pin mode and Flash size. Keil synchronization is idempotent.
 - Both reports compile using XeLaTeX/BibTeX with IEEEtran. Full page contact sheets
   and representative full pages inspected; all six link destinations on every
-  page and metadata author verified. Fonts/PDFs remain local and ignored by Git.
+  page and metadata author verified. Downloaded fonts remain ignored by Git; final report PDFs are included.
   Final report lengths: English 33 pages, Persian 31 pages. No overfull boxes,
   missing characters or unresolved references in the final compilation logs.
 
@@ -94,3 +94,11 @@ Before extending: read AGENTS.md and all agent-guidelines files. Keep IOC and bo
 build systems synchronized, use USER CODE boundaries, update both language
 reports and this status file. PDFs of datasheets must not enter the project.
 '''
+
+## Report publication policy ? 2026-10-10
+
+User explicitly requested report PDFs on GitHub. Root/project/template ignore
+rules now allow docs/english/main_report.pdf and docs/persian/main_report.pdf.
+AGENTS and local guidelines require retaining both final PDFs with LaTeX sources
+and rebuilding them after content edits. Datasheet PDFs, fonts and temporary
+render/build files remain excluded. This supersedes the initial PDF exclusion.

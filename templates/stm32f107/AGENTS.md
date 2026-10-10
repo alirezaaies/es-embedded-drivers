@@ -10,7 +10,9 @@ CubeMX generation, then its structural checks and appropriate builds/tests.
 READMEs start in English, then Persian. Reports follow the supplied bilingual
 LaTeX structure, xepersian, IEEE bibliography and exact author branding. Preserve
 all six author links on cover, every page footer and final contact section.
-Track editable sources; do not track PDF, font, rendering or build artifacts.
+Track editable report sources and final English/Persian main_report.pdf files.
+Do not track datasheet PDFs, downloaded fonts, rendering images or build artifacts.
+Rebuild and verify both report PDFs whenever report content changes.
 Datasheets are official links only. Update PROJECT_STATUS.md with real validation
 and unfinished hardware work; never equate simulated tests with board validation.
 
