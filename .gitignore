@@ -53,3 +53,29 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# Embedded tools and report build products
+.pio/
+.vscode/
+__pycache__/
+MDK-ARM/build/
+*.uvoptx
+*.uvguix.*
+*.crf
+*.axf
+*.lst
+*.log
+*.aux
+*.toc
+*.bbl
+*.blg
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.pdf
+**/docs/fonts/
+**/docs/images/
+**/docs/tmp/
+!**/tools/post_generate.cmd
+build-console.txt
+*.xdv

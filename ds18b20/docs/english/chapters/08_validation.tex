@@ -1,0 +1,37 @@
+\section{Validation and the board acceptance procedure}
+\subsection{Automated evidence}
+PlatformIO successfully builds the sensor example and raw template with warning
+checks enabled. Structural checks validate local file paths, Keil source
+membership including startup, protected App hooks, IOC pin settings and Flash
+size. The tests compile real portable C and execute it on an emulated Cortex-M3:
+\begin{lstlisting}[language={}]
+python -m pip install unicorn
+python tests/run_tests.py
+python tools/check_project.py
+\end{lstlisting}
+One test suite substitutes protocol responses to exercise array ordering,
+replacement, ambiguity, incomplete scans, overflow, CRC faults, missing sensors,
+timeout, signed decoding, range rejection and tick wrap. Another executes actual
+1-Wire code against scripted line samples to check reset failures, CRC vectors,
+ROM enumeration and requested critical delays. This is useful software evidence,
+not proof of sensor electronics or analog timing.
+
+\subsection{Board test steps}
+Build and program with the selected probe. Connect one externally powered sensor
+on PB10. Wait for at least one completed sample cycle; record ROM, status and a
+reasonable ambient temperature. Add sensors one at a time and verify each appears
+in the next free slot. Initialize known ROMs and confirm array order after restart.
+Disconnect one sensor: its status must fail and its temperature must be NAN.
+Connect a new sensor and verify it occupies the same index after discovery.
+Repeat with two simultaneous replacements and confirm mappings remain unchanged
+until manual resolution. Test an absent pull-up and a safely simulated stuck-low
+line. Inspect waveforms under the intended interrupt load and compare temperature
+against an independent reference at several points. Record results in the status
+file; physical tests have not yet been run.
+
+\subsection{Maintaining evidence}
+Update PROJECT\_STATUS.md after each phase. Distinguish a source check, successful
+compiler build, actual CubeMX regeneration and physical measurement. Keep
+datasheet downloads outside the project; official links and a bibliography
+remain inside. Report PDFs, downloaded fonts and rendering images are local
+artifacts excluded from Git. The editable LaTeX source is retained.

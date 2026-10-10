@@ -1,0 +1,26 @@
+\section{Goal, boundaries and starting point}
+I organize each sensor or IC as an independent project. Its folder contains all
+application sources, portable driver sources, vendor MCU support, CubeMX settings,
+Keil configuration and PlatformIO configuration. Copying a project does not require
+the repository root or any sibling project. This first project uses DS18B20 on PB10
+and STM32F107VCT6; the library itself does not depend on that processor.
+
+The original copied application included LCD, relays, electrical measurement,
+multiple temperature buses, Flash settings and build artifacts. Those functions
+are removed from the new project. Only the development foundation and reviewed
+portable protocol routines are retained. The raw template contains no sensor code.
+
+\subsection{Hardware information versus verified measurements}
+The copied configuration specifies an 8 MHz HSE crystal, PLL multiplier nine,
+72 MHz core, 36 MHz APB1, 72 MHz APB2 and a 3.3 V design supply. The MCU has
+256 KiB Flash and 64 KiB RAM\cite{stm32}. The user identifies PB10 as the connected
+sensor pin. These facts define the firmware assumptions; I have not measured the
+physical board, supply or waveform. Old PC7, relay and LCD connections are not used.
+
+\subsection{What is delivered}
+The project supports one addressed sensor or a caller-sized address array with
+corresponding temperature and status arrays. Conversion scheduling is cooperative,
+ROM discovery is incremental, and replacement preserves a slot when identity is
+unambiguous. The portable implementation uses caller-owned static storage and no
+heap. External sensor power is required. Parasite power, persistent mapping and
+hardware-assisted transfer are future extensions, not implemented features.

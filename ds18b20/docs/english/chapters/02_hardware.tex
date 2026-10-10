@@ -1,0 +1,31 @@
+\section{Connect and understand the sensor}
+The original datasheet\cite{ds18b20} defines a unique eight-byte ROM and a nine-byte
+scratchpad. ROM byte zero is family code 0x28, bytes one through six identify the
+device, and byte seven is CRC8. The first two scratchpad bytes form a signed
+temperature in units of 1/16 degree Celsius. Byte four selects resolution;
+lower-resolution undefined bits must be masked. The final byte protects the
+scratchpad with CRC8. Resolution controls granularity and conversion time, not
+the sensor's absolute accuracy.
+
+\subsection{Three-wire connection}
+Connect DQ to PB10, VDD to 3.3 V and GND to the MCU ground. A typical 4.7 kOhm
+resistor connects DQ to 3.3 V. Confirm the actual package pinout in the original
+datasheet; do not infer it from cable colours. A long or heavily loaded bus may
+require an adjusted pull-up and topology after waveform measurements. PB10 is
+open-drain, initially released high, with no internal pull-up. Writing a GPIO one
+releases the line; it must never drive against a sensor pulling the line low.
+
+\subsection{Power and startup}
+This adapter supplies no strong pull-up and therefore does not support parasite
+power. Use the VDD connection. The sensor's power-on temperature register contains
+85 C; that same temperature can also be a real measurement. The array starts
+conversion before reading and never rejects 85 C merely because of its value.
+Direct scratchpad reads are the caller's responsibility: start and complete a
+conversion first. If the sensor resets during a conversion, value alone cannot
+prove freshness; systems requiring stronger detection need additional diagnostics.
+
+\subsection{Debug interface}
+Connect PA13/SWDIO, PA14/SWCLK, common ground and the probe's target voltage
+reference. Supply the target from its intended board supply. Keep SWD enabled;
+JTAG is released by the MSP setup. A probe connection is separate from the
+temperature bus and does not provide evidence that sensor wiring is correct.

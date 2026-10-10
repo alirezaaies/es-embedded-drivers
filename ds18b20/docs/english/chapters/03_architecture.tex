@@ -1,0 +1,37 @@
+\section{Architecture and portability}
+\begin{tabular}{p{0.30\linewidth}p{0.62\linewidth}}
+\toprule Location & Responsibility \\ \midrule
+Core & CubeMX-owned main, interrupts, HAL configuration and system clock. \\
+Application & Board adapter, DWT delay, GPIO callbacks and example arrays. \\
+Libraries/OneWire & Reset, bit slots, bytes, Dallas CRC8 and ROM search. \\
+Libraries/DS18B20 & Addressed commands, scratchpad decoding and array scheduler. \\
+Drivers & Local vendor HAL and CMSIS shared by both build systems\cite{cubef1}. \\
+MDK-ARM & Keil project and Arm assembly startup. \\
+Core/Startup & GNU assembly startup for PlatformIO. \\
+tools and tests & Regeneration synchronization, checks and emulated C tests. \\
+\bottomrule
+\end{tabular}
+
+\subsection{The hardware contract}
+\texttt{OneWire\_Bus} binds a context pointer and callbacks. Drive-low asserts
+the line; release makes it high impedance; read samples the pin. Delay accepts
+microseconds and must run while interrupts are disabled. The optional critical
+callbacks must be supplied as a pair: entering returns previous interrupt state,
+leaving restores that exact state. Supplying neither requires the application's
+environment to guarantee bit timing independently.
+
+On this Cortex-M3, DWT cycle counting supplies the delay. The adapter enables
+trace and cycle counting after the system clock is configured. GPIO BSRR/BRR
+registers perform single writes without GPIO reconfiguration. The elapsed-cycle
+subtraction handles counter wrap for these short delays. Other MCUs, including
+ARM families without a usable DWT counter, should implement a timer callback.
+The portable headers include only standard C headers and other portable headers.
+
+\subsection{Ownership and concurrency}
+The caller allocates the array object, ROM array, discovery buffer, temperatures
+and per-slot status. Both ROM buffers have the configured capacity, are separate,
+and remain alive throughout use. No allocation or global library singleton is
+required. Different buses may have separate instances. Calls on the same bus
+must be serialized by the application; never invoke the driver from an ISR or
+change core frequency during a transaction. An RTOS mutex belongs around complete
+transactions, not around an individual callback.

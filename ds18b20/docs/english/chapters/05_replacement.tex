@@ -1,0 +1,35 @@
+\section{Stable slots and replacement}
+Search ROM returns device order according to bit-level arbitration, which is
+not a physical location identifier. Existing ROMs are matched by all eight bytes,
+so a changed search order does not rearrange outputs. With no missing assigned
+devices, unknown ROMs fill the first empty slots.
+
+\subsection{An unambiguous replacement}
+Suppose addresses are A, B and C. Disconnect B and connect D. A complete scan
+finds A, C and D: one assigned address is missing and one address is unknown.
+The mapping becomes A, D and C, preserving array index one. Discovery runs
+approximately every two seconds and sampling follows, so the change is not
+instantaneous. Temperature becomes NAN while busy or invalid.
+
+\subsection{Ambiguity and manual control}
+If B and C disappear while D and E appear, software cannot infer which physical
+location belongs to D. It keeps the old mappings rather than inventing a pairing.
+Replace sensors one at a time or call \texttt{DS18B20\_ArrayReplace} for a chosen
+slot when phase is zero. The explicit function rejects a ROM already used by
+another slot. Phase zero occurs between cycles; make the call from the same task
+that services the array. No manual replacement is allowed during conversion.
+
+\subsection{Incomplete scans and capacity}
+CRC failure, impossible search-bit responses or missing presence reset the search
+state. Automatic mapping requires a complete enumeration. If more DS18B20 devices
+exist than the discovery buffer can hold, the overflow flag is raised and automatic
+mapping is inhibited. Increase the configured slot count to accommodate the entire
+bus. A physically present but electrically unreadable sensor remains an error;
+there is no way to identify its location without an address or a separate bus.
+
+\subsection{Persistence is an application decision}
+The ROM table is stored in RAM. It does not survive a processor reset unless
+the application reloads it. To retain labels, initialize with known ROMs or
+implement application-owned nonvolatile storage with CRC and power-loss safety.
+The library neither reserves Flash pages nor chooses a storage policy. Do not
+write Flash every sampling cycle. Each project can add storage independently.
