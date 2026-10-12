@@ -1,0 +1,30 @@
+\Needspace{6\baselineskip}
+\section{Add the next independent driver}
+\subsection{Start from a copied foundation}
+Copy the complete raw template to a new directory named for the IC. Rename its IOC, Keil target and output, then configure hardware in CubeMX. The copied project must own vendor sources and build files. Do not refer to the template with include paths or relative source paths after copying.
+
+Read the official datasheet first and record its document number, revision and official URL in the new README. Keep downloaded PDFs local. Define the smallest useful operation, its output units, timeout behavior and error policy before writing a larger API.
+
+\subsection{A repeatable development order}
+\begin{enumerate}
+\item Configure pins, clock and power assumptions in the local IOC.
+\item Write a small portable header and implementation. Keep register/HAL knowledge in an Application adapter.
+\item Add a complete runnable hardware example with visible values and errors.
+\item Protect application hooks with USER CODE. Regenerate in a disposable copy and verify preservation.
+\item Synchronize Keil, run structural checks, build Keil and PlatformIO and test meaningful protocol/error cases.
+\item Write an English-first/Persian standalone README and update local status with actual evidence.
+\item Add one chapter in each central report edition, update the repository catalog and rebuild both PDFs.
+\item Perform hardware acceptance and append real measurements without replacing the software evidence.
+\end{enumerate}
+
+\subsection{Add a chapter to this report}
+Create matching numbered files under both \texttt{chapters} directories and add the corresponding \texttt{\textbackslash input} lines before the extension chapter. Keep the contact section at the end. A device chapter follows the same order as DS18B20: purpose, wiring, first run, protocol, API, reasoning, adapter, regeneration, errors, acceptance and reuse. Add official references to both bibliography files and cite them where used.
+
+Use XeLaTeX for both languages, XePersian for Persian and IEEEtran/BibTeX for citation order. The matching color scheme, 1.5 body spacing, small link icons and six author destinations are configured in the edition's \texttt{config.tex}. Persian Latin terms are isolated with \texttt{\textbackslash lr} or an LTR environment and placed on separate source lines for easier editing.
+
+From the repository root:
+\begin{lstlisting}[language={},numbers=none]
+python docs/tools/build_reports.py
+python docs/tools/verify_reports.py
+\end{lstlisting}
+The build runs XeLaTeX, BibTeX and two more XeLaTeX passes. The verifier checks PDF authors, all six author destinations in each page's footer, page bounds and renders pages for review. Inspect the resulting contact sheets and full-size pages as well; automated link checks alone cannot establish good typography. Fonts and render output stay ignored; final PDFs are tracked.

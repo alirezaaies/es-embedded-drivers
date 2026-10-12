@@ -9,7 +9,7 @@ root = Path(__file__).resolve().parents[1]
 packages = Path(os.environ.get('PLATFORMIO_CORE_DIR', str(Path.home()/'.platformio')))/'packages'
 bin_dir = packages/'toolchain-gccarmnoneeabi/bin'
 suffix = '.exe' if os.name == 'nt' else ''
-def run_suite(test_source, library_sources):
+def run_suite(test_source, library_sources, extra_flags=()):
   with tempfile.TemporaryDirectory() as temp:
     temp = Path(temp)
     elf, binary = temp/'test.elf', temp/'test.bin'
@@ -18,6 +18,7 @@ def run_suite(test_source, library_sources):
            '-O1','-g','-Wall','-Wextra','-Werror','-nostartfiles',
            '-Wl,-Ttext=0x10000,-Tdata=0x20000000,-e,main']
     cmd += ['-I'+str(root/'Libraries/DS18B20/Inc'), '-I'+str(root/'Libraries/OneWire/Inc')]
+    cmd += list(extra_flags)
     subprocess.run(cmd + [str(s) for s in sources] + ['-o',str(elf)],check=True)
     objcopy = str(bin_dir/('arm-none-eabi-objcopy'+suffix))
     subprocess.run([objcopy, '-O','binary','-j','.text','-j','.rodata',str(elf),str(binary)],check=True)
@@ -39,6 +40,10 @@ def run_suite(test_source, library_sources):
     if result: raise AssertionError(f'C test failed at line {result}')
     print('PASS:', test_source)
 
-run_suite('tests/test_driver.c', [root/'Libraries/DS18B20/Src/ds18b20.c',
-                               root/'Libraries/DS18B20/Src/ds18b20_array.c'])
+run_suite('tests/test_driver.c', [root/'Libraries/DS18B20/Src/ds18b20.c'])
 run_suite('tests/test_one_wire.c', [root/'Libraries/OneWire/Src/one_wire.c'])
+run_suite('tests/test_app.c', [root/'Application/Src/app.c'],
+          ['-DSTM32F107xC', '-DUSE_HAL_DRIVER'] +
+          ['-I'+str(root/path) for path in ['Application/Inc', 'Core/Inc',
+           'Drivers/STM32F1xx_HAL_Driver/Inc', 'Drivers/CMSIS/Include',
+           'Drivers/CMSIS/Device/ST/STM32F1xx/Include']])

@@ -83,3 +83,13 @@ build-console.txt
 # Track final bilingual report PDFs; other PDFs remain excluded.
 !**/docs/english/main_report.pdf
 !**/docs/persian/main_report.pdf
+
+# Probe and generated IDE session files
+JLinkLog.txt
+JLinkSettings.ini
+MDK-ARM/DebugConfig/
+MDK-ARM/RTE/
+*.scvd
+*.bak
+*_save
+MXTmpFiles/

@@ -1,0 +1,26 @@
+% !TeX program = xelatex
+% !TeX encoding = UTF-8
+\documentclass[11pt,a4paper]{article}
+\input{config}
+\input{formatter}
+\begin{document}
+\makecover
+{\setlength{\parskip}{0pt}\fontsize{10}{12}\selectfont\setstretch{1.5}\tableofcontents}
+\clearpage
+\input{chapters/01_repository}
+\clearpage
+\input{chapters/02_ds18b20}
+\input{chapters/03_extension}
+\clearpage
+\begingroup
+\let\plainurl\url
+\renewcommand{\url}[1]{\faIcon{external-link-alt}\,\plainurl{#1}}
+\begin{latin}
+\renewcommand{\refname}{\rl{منابع}}
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+\end{latin}
+\endgroup
+\clearpage
+\input{chapters/04_contact}
+\end{document}

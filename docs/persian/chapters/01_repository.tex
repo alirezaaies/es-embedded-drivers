@@ -1,0 +1,51 @@
+\section{مجموعه‌ای که پروژه‌به‌پروژه رشد می‌کند}
+این مخزن را برای استفادهٔ دوباره از درایورهای سیستم‌های نهفته و آموزش روش ساخت آن‌ها نگه می‌دارم. هر قطعه یک پروژهٔ کامل دارد که می‌توان آن را به پوشه‌ای دیگر کپی کرد. خود کتابخانهٔ قابل‌حمل نیز به‌تنهایی قابل انتقال است؛ برای اتصال آن به میکروکنترلر دیگر یک آداپتر سخت‌افزاری کوچک نوشته می‌شود.
+
+گزارش، مستند مشترک مجموعه است و وابستگی مشترک ساخت firmware نیست. یک نسخهٔ انگلیسی و یک نسخهٔ فارسی داریم. هر درایور جدید یک فصل دارد که مدار، کد، روش تست و وضعیت اعتبارسنجی همان پروژه را توضیح می‌دهد. README هر پروژه باید برای استفادهٔ مستقل و بدون این گزارش کافی باشد.
+
+\subsection{فهرست فعلی}
+\begin{tabular}{p{27mm}p{57mm}p{49mm}}
+\toprule
+پروژه & کاربرد & شواهد فعلی\\
+\midrule
+\lr{DS18B20} & خواندن دمای یک سنسور روی
+\lr{STM32F107VCT6 / PB10}
+& ساخت و تست نرم‌افزاری؛ تست برد باقی است\\
+قالب پایه & شروع مستقل برای پروژهٔ جدید & وضعیت محلی قالب بررسی شود\\
+\bottomrule
+\end{tabular}
+
+\subsection{جای هر بخش در پروژه}
+\begin{LTR}
+\begin{lstlisting}[language={},numbers=none]
+ds18b20/
+  DS18B20.ioc          # hardware configuration
+  Core/               # CubeMX-generated initialization
+  Drivers/            # local ST HAL and CMSIS
+  Application/        # board adapter and hardware demo
+  Libraries/OneWire/  # portable wire protocol
+  Libraries/DS18B20/  # portable temperature operation
+  MDK-ARM/            # Keil project and startup
+  platformio.ini      # GCC build and probe selection
+  tests/              # simulated portable C tests
+  tools/              # source synchronization/checks
+  README.md           # standalone usage instructions
+  PROJECT_STATUS.md   # evidence and unfinished work
+docs/
+  english/            # one complete report edition
+  persian/            # matching report edition
+  tools/              # report build and PDF verification
+\end{lstlisting}
+\end{LTR}
+بخش
+\lr{Core}
+میکروکنترلر را راه‌اندازی می‌کند. بخش
+\lr{Application}
+رجیستر GPIO و کلاک را می‌شناسد. بخش
+\lr{Libraries}
+کد C قابل استفادهٔ دوباره برای صحبت با سنسور را نگه می‌دارد. با این جداسازی، کد دما هم در شبیه‌سازی و هم روی برد دیگر قابل استفاده است.
+
+\subsection{روش مطالعه و بازتولید}
+برای اولین نتیجه، مرحله‌های ۱ تا ۴ فصل سنسور را به ترتیب انجام دهید. مرحلهٔ ۵ دو تابع لازم برای پروژهٔ دیگر را آموزش می‌دهد و مراحل ۶ و ۷ نمونه و تغییر پایه را توضیح می‌دهند. مراحل ۸ تا ۱۰ پس از نتیجۀ عملی به پیاده‌سازی می‌پردازند؛ می‌توانید بعداً به آن‌ها برگردید. ساخت موفق، تست شبیه‌سازی و اندازه‌گیری واقعی سه نتیجهٔ جدا هستند. مرحلهٔ نهایی، ثبت تست پذیرش برد است.
+
+PDF دیتاشیت‌ها فقط مرجع محلی‌اند و وارد گیت نمی‌شوند. README و منابع گزارش، لینک رسمی و نسخهٔ منبع را حفظ می‌کنند. PDF نهایی گزارش و سورس قابل ویرایش در گیت نگهداری می‌شوند؛ فونت دانلودشده، تصویر بررسی و خروجی ساخت وارد گیت نمی‌شوند.

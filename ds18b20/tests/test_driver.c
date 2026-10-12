@@ -1,98 +1,87 @@
-#include "ds18b20_array.h"
+#include "ds18b20.h"
 #include <string.h>
-#include <math.h>
 #define CHECK(x) do { if (!(x)) return __LINE__; } while (0)
-
-static DS18B20_Rom devices[4];
-static size_t device_count, search_index;
-static bool presence = true, ready = true, crc_bad, scan_bad, pad_zero;
-static uint8_t pad[9];
-static size_t byte_index;
-bool OneWire_IsValid(const OneWire_Bus *b) { return b != 0; }
-bool OneWire_Reset(const OneWire_Bus *b) { (void)b; byte_index = 0; return presence; }
-void OneWire_WriteByte(const OneWire_Bus *b, uint8_t value) { (void)b; (void)value; }
+static uint8_t scratch[9], sent[4];
+static unsigned reset_count, read_count, sent_count, waits, ready_after;
+static unsigned missing_reset;
+static void action(void *c) { (void)c; }
+static bool line(void *c) { (void)c; return true; }
+static void us(void *c, uint32_t n) { (void)c; (void)n; }
+static void ms(void *c, uint32_t n) { (void)c; waits += n; }
+bool OneWire_IsValid(const OneWire_Bus *b) { return b && b->drive_low; }
+bool OneWire_Reset(const OneWire_Bus *b)
+{ (void)b; return ++reset_count != missing_reset; }
+void OneWire_WriteByte(const OneWire_Bus *b, uint8_t n)
+{ (void)b; if (sent_count < 4) sent[sent_count++] = n; }
+bool OneWire_ReadBit(const OneWire_Bus *b)
+{ (void)b; return waits >= ready_after; }
 uint8_t OneWire_ReadByte(const OneWire_Bus *b)
-{
-    (void)b;
-    uint8_t value = pad_zero ? 0 : pad[byte_index];
-    if (byte_index++ == 8 && crc_bad) value ^= 1;
-    return value;
-}
-bool OneWire_ReadBit(const OneWire_Bus *b) { (void)b; return ready; }
+{ (void)b; return scratch[read_count++]; }
+/* Independent host-bus CRC fixture; actual CRC implementation is tested
+ * separately against published scratchpad vectors. */
 uint8_t OneWire_Crc8(const uint8_t *d, size_t n)
 {
-    uint8_t crc=0;
-    while(n--) { uint8_t value=*d++; for(int i=0;i<8;++i) {
-        uint8_t mix=(crc^value)&1; crc>>=1; if(mix) crc^=0x8C; value>>=1;
-    }}
-    return crc;
+    unsigned crc = 0;
+    for (size_t i = 0; i < n; ++i) {
+        crc ^= d[i];
+        for (unsigned j = 0; j < 8; ++j)
+            crc = (crc & 1) ? (crc >> 1) ^ 0x8c : crc >> 1;
+    }
+    return (uint8_t)crc;
 }
-void OneWire_SearchReset(OneWire_SearchState *s) { memset(s,0,sizeof(*s)); search_index=0; }
-bool OneWire_SearchNext(const OneWire_Bus *b, OneWire_SearchState *s, uint8_t rom[8])
+static void fixture(int raw, uint8_t config)
 {
-    (void)b;
-    if(scan_bad) { OneWire_SearchReset(s); return false; }
-    if(search_index == device_count) return false;
-    memcpy(rom,devices[search_index++],8);
-    s->last_device = search_index == device_count;
-    return true;
-}
-static void make_rom(uint8_t *r,uint8_t serial)
-{
-    memset(r,0,8); r[0]=0x28; r[1]=serial; r[7]=OneWire_Crc8(r,7);
-}
-static void make_pad(int16_t raw,uint8_t config)
-{
-    pad[0]=(uint8_t)raw; pad[1]=(uint8_t)((uint16_t)raw>>8);
-    pad[2]=75; pad[3]=70; pad[4]=config; pad[5]=0xFF; pad[6]=12; pad[7]=0x10;
-    pad[8]=OneWire_Crc8(pad,8);
-}
-static bool cycle(DS18B20_Array *a,uint32_t start)
-{
-    for(uint32_t i=0;i<2000;++i) if(DS18B20_ArrayProcess(a,start+i)) return true;
-    return false;
+    uint8_t bytes[9] = {(uint8_t)raw, (uint8_t)((uint16_t)raw >> 8),
+                        75, 70, config, 0xff, 0x0c, 0x10, 0};
+    memcpy(scratch, bytes, 9);
+    scratch[8] = OneWire_Crc8(scratch, 8);
+    reset_count = read_count = sent_count = waits = ready_after = missing_reset = 0;
 }
 int main(void)
 {
-    DS18B20_Array a;
-    OneWire_Bus bus={0};
-    DS18B20_Rom roms[2]={{0}}, scan[2];
-    float values[2]; DS18B20_Status status[2];
-    make_rom(devices[0],1); make_rom(devices[1],2); make_rom(devices[2],3);
-    make_pad(-162,0x7F);
-    CHECK(DS18B20_IsValidRom(devices[0]));
-    CHECK(!DS18B20_IsValidRom(roms[0]));
-    CHECK(!DS18B20_ArrayInit(&a,&bus,roms,scan,values,status,0));
-    CHECK(DS18B20_ArrayInit(&a,&bus,roms,scan,values,status,2));
-    device_count=2;
-    CHECK(cycle(&a,0));
-    CHECK(memcmp(roms[0],devices[0],8)==0 && memcmp(roms[1],devices[1],8)==0);
-    CHECK(values[0]==-10.125F && status[1]==DS18B20_STATUS_OK);
-    CHECK(!DS18B20_ArrayReplace(&a,0,roms[1]));
-    /* Remove first sensor, keep second and introduce a new ROM. */
-    memcpy(devices[0],devices[2],8);
-    CHECK(cycle(&a,3000));
-    CHECK(memcmp(roms[0],devices[2],8)==0 && memcmp(roms[1],devices[1],8)==0);
-    /* Two replacements are ambiguous: keep both original mappings. */
-    make_rom(devices[0],4); make_rom(devices[1],5);
-    CHECK(cycle(&a,6000));
-    CHECK(roms[0][1]==3 && roms[1][1]==2);
-    /* An incomplete search must never replace a mapping. */
-    scan_bad=true; CHECK(cycle(&a,9000)); CHECK(roms[0][1]==3 && a.scan_error);
-    scan_bad=false; device_count=3;
-    CHECK(cycle(&a,12000)); CHECK(a.overflow && roms[0][1]==3);
-    crc_bad=true; CHECK(cycle(&a,15000));
-    CHECK(status[0]==DS18B20_STATUS_CRC_ERROR && isnan(values[0])); crc_bad=false;
-    pad_zero=true; CHECK(cycle(&a,18000)); CHECK(status[0]==DS18B20_STATUS_CRC_ERROR); pad_zero=false;
-    presence=false; CHECK(cycle(&a,21000)); CHECK(status[0]==DS18B20_STATUS_NO_DEVICE); presence=true;
-    ready=false; CHECK(cycle(&a,24000)); CHECK(status[0]==DS18B20_STATUS_TIMEOUT); ready=true;
-    make_pad(-161,0x1F); CHECK(DS18B20_DecodeRaw(pad)==-168);
-    make_pad(2001,0x7F); float out=42;
-    CHECK(DS18B20_ReadTemperature(&bus,roms[0],&out)==DS18B20_STATUS_OUT_OF_RANGE && out==42);
-    make_pad(1360,0x7F); CHECK(DS18B20_ReadTemperature(&bus,roms[0],&out)==DS18B20_STATUS_OK && out==85);
-    make_pad(400,0x7F);
-    CHECK(DS18B20_ArrayInit(&a,&bus,roms,scan,values,status,2));
-    device_count=2;
-    CHECK(cycle(&a,0xFFFFFF00U)); CHECK(status[0]==DS18B20_STATUS_OK);
+    DS18B20 sensor = {{0,action,action,line,us,0,0},ms};
+    float t = -999;
+    CHECK(DS18B20_ReadTemperature(0,&t) == DS18B20_INVALID_ARGUMENT);
+    CHECK(DS18B20_ReadTemperature(&sensor,0) == DS18B20_INVALID_ARGUMENT);
+    sensor.delay_ms = 0;
+    CHECK(DS18B20_ReadTemperature(&sensor,&t) == DS18B20_INVALID_ARGUMENT);
+    sensor.delay_ms = ms;
+    fixture(401,0x7f); ready_after = 750;
+    CHECK(DS18B20_ReadTemperature(&sensor,&t) == DS18B20_OK && t == 25.0625f);
+    CHECK(waits == 750 && read_count == 9 && reset_count == 2 && sent_count == 4);
+    CHECK(sent[0] == 0xcc && sent[1] == 0x44 && sent[2] == 0xcc && sent[3] == 0xbe);
+    fixture(-162,0x7f);
+    CHECK(DS18B20_ReadTemperature(&sensor,&t) == DS18B20_OK && t == -10.125f);
+    for (unsigned resolution = 0; resolution < 4; ++resolution) {
+        fixture(407,(uint8_t)(0x1f | resolution << 5));
+        CHECK(DS18B20_ReadTemperature(&sensor,&t) == DS18B20_OK);
+        CHECK(t == (float)(407 & ~((1 << (3-resolution))-1)) / 16.0f);
+        fixture(-161,(uint8_t)(0x1f | resolution << 5));
+        CHECK(DS18B20_ReadTemperature(&sensor,&t) == DS18B20_OK);
+        CHECK(t == (float)(-161 & ~((1 << (3-resolution))-1)) / 16.0f);
+    }
+    fixture(-880,0x7f); CHECK(DS18B20_ReadTemperature(&sensor,&t) == DS18B20_OK && t == -55);
+    fixture(2000,0x7f); CHECK(DS18B20_ReadTemperature(&sensor,&t) == DS18B20_OK && t == 125);
+    fixture(1360,0x7f); CHECK(DS18B20_ReadTemperature(&sensor,&t) == DS18B20_OK && t == 85);
+    t = -999;
+    fixture(2001,0x7f); CHECK(DS18B20_ReadTemperature(&sensor,&t) == DS18B20_INVALID_DATA && t == -999);
+    fixture(-881,0x7f); CHECK(DS18B20_ReadTemperature(&sensor,&t) == DS18B20_INVALID_DATA && t == -999);
+    fixture(400,0x7f); missing_reset = 1;
+    CHECK(DS18B20_ReadTemperature(&sensor,&t) == DS18B20_NO_DEVICE && sent_count == 0 && t == -999);
+    fixture(400,0x7f); missing_reset = 2;
+    CHECK(DS18B20_ReadTemperature(&sensor,&t) == DS18B20_NO_DEVICE && t == -999);
+    fixture(400,0x7f); ready_after = 801;
+    CHECK(DS18B20_ReadTemperature(&sensor,&t) == DS18B20_TIMEOUT && waits == 800 && t == -999);
+    fixture(400,0x7f); ready_after = 800;
+    CHECK(DS18B20_ReadTemperature(&sensor,&t) == DS18B20_OK);
+    t = -999;
+    fixture(400,0x7f); scratch[0] ^= 1;
+    CHECK(DS18B20_ReadTemperature(&sensor,&t) == DS18B20_CRC_ERROR && t == -999);
+    fixture(0,0x1f); memset(scratch,0,9);
+    CHECK(DS18B20_ReadTemperature(&sensor,&t) == DS18B20_INVALID_DATA && t == -999);
+    for (unsigned i = 4; i <= 7; ++i) {
+        fixture(400,0x7f); scratch[i] ^= 1; scratch[8] = OneWire_Crc8(scratch,8);
+        CHECK(DS18B20_ReadTemperature(&sensor,&t) == DS18B20_INVALID_DATA && t == -999);
+    }
     return 0;
 }

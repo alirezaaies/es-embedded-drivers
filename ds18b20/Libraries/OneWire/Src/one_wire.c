@@ -1,236 +1,88 @@
-/** @file one_wire.c */
 #include "one_wire.h"
-
-#include <string.h>
-
-#define ONE_WIRE_SEARCH_ROM 0xF0U
-
-static uint32_t enter_critical(const OneWire_Bus *bus)
+static uint32_t lock(const OneWire_Bus *bus)
 {
-    return (bus->enter_critical != NULL)
-               ? bus->enter_critical(bus->context)
-               : 0U;
+    return bus->enter_critical ? bus->enter_critical(bus->context) : 0U;
 }
-
-static void exit_critical(const OneWire_Bus *bus, uint32_t state)
+static void unlock(const OneWire_Bus *bus, uint32_t state)
 {
-    if (bus->exit_critical != NULL) {
-        bus->exit_critical(bus->context, state);
-    }
+    if (bus->exit_critical) bus->exit_critical(bus->context, state);
 }
-
 bool OneWire_IsValid(const OneWire_Bus *bus)
 {
-    return (bus != NULL) && (bus->drive_low != NULL) &&
-           (bus->release_line != NULL) && (bus->read_line != NULL) &&
-           (bus->delay_us != NULL) &&
-           ((bus->enter_critical == NULL) == (bus->exit_critical == NULL));
+    return bus && bus->drive_low && bus->release_line && bus->read_line &&
+           bus->delay_us && ((bus->enter_critical == NULL) ==
+                            (bus->exit_critical == NULL));
 }
-
-bool OneWire_Init(OneWire_Bus *bus, const OneWire_Bus *configuration)
-{
-    if ((bus == NULL) || !OneWire_IsValid(configuration)) {
-        return false;
-    }
-    *bus = *configuration;
-    bus->release_line(bus->context);
-    return true;
-}
-
 bool OneWire_Reset(const OneWire_Bus *bus)
 {
+    uint32_t state;
     bool presence;
-    uint32_t critical_state;
-
-    if (!OneWire_IsValid(bus)) {
-        return false;
-    }
+    if (!OneWire_IsValid(bus)) return false;
     bus->release_line(bus->context);
     bus->delay_us(bus->context, 5U);
     if (!bus->read_line(bus->context)) return false;
+    /* Keep reset low within its intended width even under interrupt load. */
+    state = lock(bus);
     bus->drive_low(bus->context);
     bus->delay_us(bus->context, 480U);
-    critical_state = enter_critical(bus);
     bus->release_line(bus->context);
     bus->delay_us(bus->context, 70U);
     presence = !bus->read_line(bus->context);
-    exit_critical(bus, critical_state);
+    unlock(bus, state);
     bus->delay_us(bus->context, 410U);
     return presence && bus->read_line(bus->context);
 }
-
-void OneWire_WriteBit(const OneWire_Bus *bus, bool value)
+static void write_bit(const OneWire_Bus *bus, bool value)
 {
-    uint32_t critical_state;
-
-    if (!OneWire_IsValid(bus)) {
-        return;
-    }
-    critical_state = enter_critical(bus);
+    uint32_t state = lock(bus);
     bus->drive_low(bus->context);
-    if (value) {
-        bus->delay_us(bus->context, 6U);
-        bus->release_line(bus->context);
-        exit_critical(bus, critical_state);
-        bus->delay_us(bus->context, 64U);
-    } else {
-        bus->delay_us(bus->context, 60U);
-        bus->release_line(bus->context);
-        exit_critical(bus, critical_state);
-        bus->delay_us(bus->context, 10U);
+    bus->delay_us(bus->context, value ? 6U : 60U);
+    bus->release_line(bus->context);
+    unlock(bus, state);
+    bus->delay_us(bus->context, value ? 64U : 10U);
+}
+void OneWire_WriteByte(const OneWire_Bus *bus, uint8_t byte)
+{
+    if (!OneWire_IsValid(bus)) return;
+    for (uint8_t i = 0; i < 8U; ++i) {
+        write_bit(bus, (byte & 1U) != 0U);
+        byte >>= 1U;
     }
 }
-
 bool OneWire_ReadBit(const OneWire_Bus *bus)
 {
+    uint32_t state;
     bool value;
-    uint32_t critical_state;
-
-    if (!OneWire_IsValid(bus)) {
-        return false;
-    }
-    critical_state = enter_critical(bus);
+    if (!OneWire_IsValid(bus)) return false;
+    state = lock(bus);
     bus->drive_low(bus->context);
     bus->delay_us(bus->context, 3U);
     bus->release_line(bus->context);
     bus->delay_us(bus->context, 10U);
     value = bus->read_line(bus->context);
-    exit_critical(bus, critical_state);
+    unlock(bus, state);
     bus->delay_us(bus->context, 53U);
     return value;
 }
-
-void OneWire_WriteByte(const OneWire_Bus *bus, uint8_t value)
-{
-    for (uint8_t bit = 0U; bit < 8U; ++bit) {
-        OneWire_WriteBit(bus, ((value >> bit) & 1U) != 0U);
-    }
-}
-
 uint8_t OneWire_ReadByte(const OneWire_Bus *bus)
 {
-    uint8_t value = 0U;
-
-    for (uint8_t bit = 0U; bit < 8U; ++bit) {
-        if (OneWire_ReadBit(bus)) {
-            value |= (uint8_t)(1U << bit);
-        }
-    }
-    return value;
+    uint8_t byte = 0;
+    for (uint8_t i = 0; i < 8U; ++i)
+        if (OneWire_ReadBit(bus)) byte |= (uint8_t)(1U << i);
+    return byte;
 }
-
-uint8_t OneWire_Crc8(const uint8_t *data, size_t length)
+uint8_t OneWire_Crc8(const uint8_t *bytes, size_t length)
 {
-    uint8_t crc = 0U;
-
-    if (data == NULL) {
-        return 0U;
-    }
-    while (length-- > 0U) {
-        uint8_t value = *data++;
-        for (uint8_t bit = 0U; bit < 8U; ++bit) {
-            const uint8_t mix = (uint8_t)((crc ^ value) & 1U);
+    uint8_t crc = 0;
+    if (!bytes) return 0;
+    while (length--) {
+        uint8_t byte = *bytes++;
+        for (uint8_t i = 0; i < 8U; ++i) {
+            bool mix = ((crc ^ byte) & 1U) != 0U;
             crc >>= 1U;
-            if (mix != 0U) {
-                crc ^= 0x8CU;
-            }
-            value >>= 1U;
+            if (mix) crc ^= 0x8CU;
+            byte >>= 1U;
         }
     }
     return crc;
-}
-
-void OneWire_SearchReset(OneWire_SearchState *state)
-{
-    if (state != NULL) {
-        memset(state, 0, sizeof(*state));
-    }
-}
-
-static bool search_next(const OneWire_Bus *bus, OneWire_SearchState *state)
-{
-    uint8_t bit_number = 1U;
-    uint8_t last_zero = 0U;
-    uint8_t rom_byte_number = 0U;
-    uint8_t rom_byte_mask = 1U;
-
-    if (!OneWire_IsValid(bus) || (state == NULL) || state->last_device) {
-        return false;
-    }
-    if (!OneWire_Reset(bus)) {
-        OneWire_SearchReset(state);
-        return false;
-    }
-    OneWire_WriteByte(bus, ONE_WIRE_SEARCH_ROM);
-
-    while (rom_byte_number < ONE_WIRE_ROM_SIZE) {
-        const bool id_bit = OneWire_ReadBit(bus);
-        const bool complement_bit = OneWire_ReadBit(bus);
-        bool direction;
-
-        if (id_bit && complement_bit) {
-            break;
-        }
-        if (id_bit != complement_bit) {
-            direction = id_bit;
-        } else {
-            if (bit_number < state->last_discrepancy) {
-                direction = (state->rom[rom_byte_number] & rom_byte_mask) != 0U;
-            } else {
-                direction = bit_number == state->last_discrepancy;
-            }
-            if (!direction) {
-                last_zero = bit_number;
-                if (last_zero < 9U) {
-                    state->last_family_discrepancy = last_zero;
-                }
-            }
-        }
-
-        if (direction) {
-            state->rom[rom_byte_number] |= rom_byte_mask;
-        } else {
-            state->rom[rom_byte_number] &= (uint8_t)~rom_byte_mask;
-        }
-        OneWire_WriteBit(bus, direction);
-
-        ++bit_number;
-        rom_byte_mask <<= 1U;
-        if (rom_byte_mask == 0U) {
-            ++rom_byte_number;
-            rom_byte_mask = 1U;
-        }
-    }
-
-    if ((bit_number != 65U) ||
-        (OneWire_Crc8(state->rom, ONE_WIRE_ROM_SIZE - 1U) !=
-         state->rom[ONE_WIRE_ROM_SIZE - 1U])) {
-        OneWire_SearchReset(state);
-        return false;
-    }
-    state->last_discrepancy = last_zero;
-    state->last_device = last_zero == 0U;
-    return true;
-}
-
-bool OneWire_SearchFirst(const OneWire_Bus *bus,
-                         OneWire_SearchState *state,
-                         uint8_t rom[ONE_WIRE_ROM_SIZE])
-{
-    if ((state == NULL) || (rom == NULL)) {
-        return false;
-    }
-    OneWire_SearchReset(state);
-    return OneWire_SearchNext(bus, state, rom);
-}
-
-bool OneWire_SearchNext(const OneWire_Bus *bus,
-                        OneWire_SearchState *state,
-                        uint8_t rom[ONE_WIRE_ROM_SIZE])
-{
-    if ((state == NULL) || (rom == NULL) || !search_next(bus, state)) {
-        return false;
-    }
-    memcpy(rom, state->rom, ONE_WIRE_ROM_SIZE);
-    return true;
 }

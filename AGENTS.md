@@ -18,3 +18,5 @@ and unfinished hardware work; never equate simulated tests with board validation
 
 Do not use the raw template as a shared build dependency. Copy it into a new
 standalone project. No agent delegation is required by these guidelines.
+
+The complete bilingual report is centralized under repository-root docs/, with one chapter per driver. Project READMEs remain standalone; project docs/ only links to the central report. Do not create per-project report PDFs.

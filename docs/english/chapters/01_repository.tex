@@ -1,0 +1,42 @@
+\section{A collection that grows one project at a time}
+I keep this repository for reusable embedded drivers and for explaining how I build them. Each device has a complete project that can be copied to another directory. The portable library can also be taken alone and connected to another MCU through a small board adapter.
+
+The report is shared documentation, not a shared firmware dependency. There is one English edition and one Persian edition. A new driver becomes a new chapter, with its own hardware, code, acceptance procedure and validation record. The project README remains sufficient for using a project without this report.
+
+\subsection{Current catalog}
+\begin{tabular}{p{27mm}p{57mm}p{49mm}}
+\toprule
+Project & Purpose & Current evidence\\
+\midrule
+DS18B20 & One-sensor Celsius reading on STM32F107VCT6, PB10 & Builds and portable tests; board acceptance pending\\
+STM32F107 foundation & Independent starting project to copy & Consult the template's local status\\
+\bottomrule
+\end{tabular}
+
+\subsection{Where each part belongs}
+\begin{lstlisting}[language={},numbers=none]
+ds18b20/
+  DS18B20.ioc          # hardware configuration
+  Core/               # CubeMX-generated initialization
+  Drivers/            # local ST HAL and CMSIS
+  Application/        # board adapter and hardware demo
+  Libraries/OneWire/  # portable wire protocol
+  Libraries/DS18B20/  # portable temperature operation
+  MDK-ARM/            # Keil project and startup
+  platformio.ini      # GCC build and probe selection
+  tests/              # simulated portable C tests
+  tools/              # source synchronization/checks
+  README.md           # standalone usage instructions
+  PROJECT_STATUS.md   # evidence and unfinished work
+docs/
+  english/            # one complete report edition
+  persian/            # matching report edition
+  tools/              # report build and PDF verification
+\end{lstlisting}
+
+\texttt{Core} initializes the MCU. \texttt{Application} knows the GPIO registers and clock. \texttt{Libraries} contains the reusable C code for talking to the sensor. This separation lets the same temperature code run in a Cortex-M3 simulation or on a different board.
+
+\subsection{How to read and reproduce the work}
+For your first result, follow DS18B20 steps 1 through 4 in order. Step 5 teaches the two functions you call in another project; steps 6 and 7 explain the example and pin changes. Steps 8 through 10 explain the implementation after the practical result. You can return to those later. Keep a distinction between a successful compiler run, a passing simulated test and an actual measurement on a board. The final step is always the board acceptance record.
+
+Datasheet PDFs are local working references and are excluded from Git. READMEs and the bibliography preserve official source URLs and revisions. Final report PDFs and editable LaTeX sources are tracked; downloaded fonts, rendered review images and build artifacts are excluded.

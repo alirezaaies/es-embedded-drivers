@@ -1,14 +1,7 @@
-# Portable DS18B20
+# DS18B20
 
-Copy this folder and `OneWire` into your target project. Compile both C files
-and OneWire's C file; add both Inc directories. No STM32 dependency or heap.
-The addressed API is in `ds18b20.h`; the configurable array API is in
-`ds18b20_array.h`. See [project usage](../../README.md) for complete examples,
-timing, replacement rules and error handling. Initializing the bus binds GPIO;
-initializing the array binds caller-owned storage and starts discovery.
+Portable C code; no MCU headers or heap allocation. Copy this folder together with OneWire and add both `Inc` paths and `Src/*.c` to your build. The complete callback binding and error-handling example are in [the standalone project guide](../../README.md). One externally powered DS18B20 per bus is required by the temperature API. See the headers for signatures and timing contracts.
 
 ## فارسی
 
-این پوشه را همراه OneWire کپی کنید و فایل‌های C و مسیرهای Inc را به پروژه
-اضافه کنید. کتابخانه به میکرو وابسته نیست و حافظهٔ پویا ندارد. راهنمای کامل
-ورودی آدرس، خروجی دما، تعویض سنسور و خطاها در ریدمی پروژه آمده است.
+کد C قابل‌حمل، بدون هدر MCU و تخصیص حافظهٔ پویا است. هر دو کتابخانه را کپی کنید، مسیرهای Inc و فایل‌های C را به ساخت اضافه کنید. روش کامل اتصال callbackها و کنترل خطا در [راهنمای مستقل پروژه](../../README.md) آمده است. API دما فقط برای یک سنسور با تغذیهٔ مستقل در هر باس است. قرارداد زمان‌بندی و امضای توابع در هدرها مشخص است.

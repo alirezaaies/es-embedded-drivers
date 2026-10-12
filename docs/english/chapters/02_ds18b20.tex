@@ -1,0 +1,247 @@
+\section{DS18B20: read your first temperature}
+\subsection{What we will build}
+Our first task is simple: connect one sensor and see its temperature in Keil. Once that works, we will use the same reading function in another project. Only then will we look inside the driver. You do not need to understand function pointers or the 1-Wire protocol to complete the first steps.
+
+This version supports \textbf{one externally powered DS18B20 on each bus}. It reads Celsius and checks errors. It does not change the sensor's resolution, search for multiple sensors, write EEPROM or provide parasite power. Keeping those features out makes the first implementation easier to follow.
+
+\checkpoint{\textbf{At the end of this chapter:} you can wire and run the example, distinguish a stale Watch display from a sensor error, use the reading function, change the GPIO through CubeMX and explain how the temperature bytes become a number.}
+
+The hardware reference is the \extlink{https://www.analog.com/media/en/technical-documentation/data-sheets/ds18b20.pdf}{official DS18B20 datasheet}: document 19-7487, Rev. 6, July 2019 \cite{ds18b20}.
+
+\subsection{Step 1: check three wires and one resistor}
+The existing example uses STM32F107VCT6. Connect the sensor as follows. Check the package drawing in the datasheet before deciding which physical leg is VDD or GND; a bottom-view drawing must not be read as a top view.
+\begin{center}
+\begin{tabular}{p{38mm}p{91mm}}
+\toprule
+Sensor signal & Board connection\\
+\midrule
+VDD & 3.3 V supply\\
+GND & The same ground as the microcontroller\\
+DQ & PB10, the data pin\\
+Pull-up resistor & 4.7 k$\Omega$ between DQ and 3.3 V\\
+\bottomrule
+\end{tabular}
+\end{center}
+DQ is the only data wire. It must be an open-drain output: the MCU can pull it low or let go of it. The resistor brings a released wire back high. The internal GPIO pull-up is not a substitute for the external resistor in this example.
+
+The project's clock is an 8 MHz external crystal multiplied to a 72 MHz CPU clock. Confirm that the assembled board really has this crystal. The SWD connections are PA13/SWDIO, PA14/SWCLK, ground and probe reference voltage. No display or serial terminal is needed for the first test.
+
+\checkpoint{\textbf{Before proceeding:} one sensor is connected, VDD is powered independently, the ground is common, DQ goes to PB10 and the pull-up is present.}
+
+\subsection{Step 2: open, build and download in Keil}
+\begin{enumerate}
+\item Open \texttt{ds18b20/MDK-ARM/DS18B20.uvprojx}. If you copied the project elsewhere, open the copy's project file.
+\item Install the STM32F1 device pack 2.4.1 and ARM Compiler 6. The compiler used for validation here is 6.24.
+\item In Options for Target, open Debug and select the physical probe. Use J-Link for a J-Link probe, or select the correct ST-Link driver for an ST-Link probe. Do not choose the simulator to test the real sensor.
+\item Check Utilities uses the target's probe for Flash programming. Build the target. Resolve build errors before starting debug.
+\item Download the new firmware, then enter the debug session. Whenever source code changes, build and download again; editing a C file does not change the firmware already on the board.
+\item Remove or disable breakpoints in the reading path. Run the program freely.
+\end{enumerate}
+The application calls initialization once and reading repeatedly. The sensor may need about 750 ms to complete a conversion. The initial numeric zero is only the C variable's starting value; it is not a successful reading.
+
+For PlatformIO, open the \texttt{ds18b20} folder and use the matching probe environment:
+\begin{lstlisting}[language={},numbers=none]
+pio run -e stm32f107vc_jlink
+pio run -e stm32f107vc_jlink -t upload
+pio debug -e stm32f107vc_jlink
+# For an ST-Link probe, use stm32f107vc_stlink.
+\end{lstlisting}
+PlatformIO Core must be installed. The first build obtains the pinned toolchain. The firmware uses the project's local HAL, CMSIS, startup and linker files.
+
+\subsection{Step 3: make Watch show the running program}
+In the debug session, open Watch 1. Double-click an empty expression row and add these names. Use \textbf{the global name} \texttt{g\_temperature\_c}, not the local variable \texttt{value} inside a function.
+\begin{center}
+\begin{tabular}{p{57mm}p{72mm}}
+\toprule
+Expression & What it tells you\\
+\midrule
+\texttt{g\_temperature\_c} & Last successful Celsius value\\
+\texttt{g\_temperature\_status} & Result of the last completed attempt\\
+\texttt{g\_temperature\_valid} & Whether that attempt succeeded\\
+\texttt{g\_measurement\_busy} & Whether a new read is in progress\\
+\texttt{g\_successful\_samples} & How many reads actually succeeded\\
+\texttt{g\_sample\_cycles} & How many attempts finished, including errors\\
+\texttt{g\_last\_success\_ms} & HAL tick at the last success\\
+\bottomrule
+\end{tabular}
+\end{center}
+\textbf{Enable View $\rightarrow$ Periodic Window Update.} Keil updates Watch when execution stops; live updates require this option \cite{keilwatch}. If it is off, a breakpoint makes a new value appear because stopping refreshes the display. This does not prove that the breakpoint caused the measurement.
+
+This exact option was zero in the saved local options file when the reported symptom was investigated. It has been set to one, and the Watch expressions were added. An already open Keil session retains its loaded settings: enable the menu option in that session too. The ignored local \texttt{.uvoptx} is not a shared Git configuration. To reproduce the setup, save and close Keil, then run from the project folder:
+\begin{lstlisting}[language={},numbers=none]
+python tools/setup_keil_watch.py
+\end{lstlisting}
+The script backs up local settings and keeps existing probe choices, watches and breakpoints. If Keil later saves old settings from an open session, run the script again after closing it.
+
+A simple example of a successful result is temperature 24.5, status 0, valid true and an increasing success count. The exact temperature depends on the board and environment. A constant temperature can be correct in a steady room; the \textbf{success count} tells us whether new reads are completing.
+
+Validity describes the last \emph{completed} attempt. It stays visible while the next conversion runs. Busy describes that conversion separately. If a completed attempt fails, valid becomes false and the previous number remains in memory. Never use that number as a fresh measurement after an error.
+
+\checkpoint{\textbf{Pass this step:} the success count increases during free execution and status remains zero. If only the screen is frozen, check live refresh and the global expression before changing the sensor driver.}
+
+\subsection{Step 4: decide whether the display or the sensor has failed}
+\begin{enumerate}
+\item A value appears only at a breakpoint: first check Periodic Window Update. A stopped display and a stopped CPU are different things.
+\item The success count increases but the temperature hardly changes: warm the sensor gently. Compare several samples, not one screen refresh.
+\item Attempts increase but successes do not: look at the status code. The loop runs, but the sensor transaction fails.
+\item Live values still cannot be read: let the program run, then pause during the 250 ms gap between attempts. Compare the counters at two such observations. Some probe/session configurations may not provide the same live memory access.
+\item Counters do not advance even at safe pauses: locate the program counter. A halt in \texttt{Error\_Handler} indicates startup failure. A halt in a fault handler indicates a CPU exception. A persistent \texttt{HAL\_Delay} needs a working SysTick and enabled interrupts. Do not infer a driver hang from the Watch value alone.
+\end{enumerate}
+Do not put a breakpoint inside GPIO slots, microsecond delays or busy polling to obtain live temperature. A debugger pause breaks real-time communication. A breakpoint after the completed read can be useful for one inspection, but is not the normal display mechanism.
+
+\begin{center}
+\begin{tabular}{p{35mm}p{94mm}}
+\toprule
+Status & Meaning and first action\\
+\midrule
+0, OK & Use the temperature.\\
+1, invalid argument & Check the output pointer and callback binding.\\
+2, no device & Check VDD, GND, DQ, resistor and actual pin.\\
+3, timeout & Check external power, clock and delays.\\
+4, CRC error & Check wiring, noise, rise time, timing and debugger pauses.\\
+5, invalid data & Check sensor type, fixed bytes and a line held low.\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Step 5: use two functions in your own STM32 project}
+The board adapter handles GPIO and timing through two functions:
+\begin{itemize}
+\item \texttt{DS18B20\_STM32\_Init()}: prepare the adapter once after board setup.
+\item \texttt{DS18B20\_STM32\_ReadTemperature()}: request a new conversion and read its result.
+\end{itemize}
+The following example gives the second function the address of the output variable.
+There are \textbf{two outputs}: the return value says whether the call succeeded; the temperature is written through the pointer. The symbol \texttt{\&temperature} means ``the address of this variable.'' Do not write \texttt{temperature = DS18B20\_STM32\_ReadTemperature(...)}: that would assign a status number, not Celsius.
+
+\texttt{float} stores a decimal number. \texttt{DS18B20\_Status} stores an operation result, and \texttt{DS18B20\_OK} means success. The \texttt{if} block uses the temperature only after that success.
+
+\begin{lstlisting}
+#include "ds18b20_stm32.h"
+
+/* After HAL, clock and GPIO initialization: */
+DS18B20_STM32_Init();
+
+/* From a foreground loop, with interrupts enabled: */
+float temperature;
+DS18B20_Status result = DS18B20_STM32_ReadTemperature(&temperature);
+if (result == DS18B20_OK) {
+    /* temperature can now be used. */
+} else {
+    /* Report the failure; do not use temperature here. */
+}
+\end{lstlisting}
+This small example illustrates the calls. The include goes in the include section, initialization after the board setup, and the read in your loop. It is not a whole \texttt{main.c} to paste over the generated file.
+
+
+
+To add the implementation to another STM32F107 project:
+\begin{enumerate}
+\item Copy both portable folders: \texttt{Libraries/OneWire} and \texttt{Libraries/DS18B20}.
+\item Copy \texttt{Application/Inc/ds18b20\_stm32.h} and \texttt{Application/Src/ds18b20\_stm32.c}.
+\item Compile the two portable C files and the adapter C file. Add their three Inc folders to the compiler include paths.
+\item Give the new project's open-drain GPIO the CubeMX label \texttt{ONE\_WIRE\_1}. The adapter reads the generated pin macros. Configure a matching CPU clock and keep interrupts enabled when reading.
+\item Call Init once after board setup. Call ReadTemperature from your application's normal loop and check its status.
+\end{enumerate}
+The adapter is specific to this Cortex-M3/register design. A different MCU requires its own adapter and vendor/startup/linker files. The two portable libraries do not require any STM32 header.
+
+\subsection{Step 6: understand the complete runnable example}
+Here is the actual application used by the supplied firmware:
+\lstinputlisting{../../ds18b20/Application/Src/app.c}
+Read it in this order: \texttt{App\_Init} calls adapter initialization. \texttt{App\_Process} marks a read busy, asks for temperature, records the returned status and publishes the successful value. It increments completed attempts, clears busy and pauses before the next attempt.
+
+The temporary \texttt{value} is local to this call. The \texttt{g\_...} variables are global, so Watch can find their fixed RAM locations. They are volatile to ensure the compiler performs the writes. Volatile does not turn on the IDE's refresh option, and these separate fields are not a synchronized RTOS message.
+
+On success, the successful-read count and last-success tick change. On failure, only the completed-attempt count and status/validity change; the old temperature and last-success time stay intact. The new application test checks this sequence and recovery from an error.
+
+The generated main has only three connections to the application:
+\begin{lstlisting}
+/* USER CODE BEGIN Includes */
+#include "app.h"
+/* USER CODE END Includes */
+
+/* USER CODE BEGIN 2 */
+App_Init();
+/* USER CODE END 2 */
+
+/* USER CODE BEGIN 3 */
+App_Process();
+/* USER CODE END 3 */
+\end{lstlisting}
+The first is in the include area, the second follows HAL/clock/GPIO setup, and the third is inside the generated infinite loop. Keep the generated braces. Use either the supplied \texttt{App\_Process} or your own reading loop; do not run both readers on the same bus at once.
+
+\subsection{Step 7: change a pin or rebuild from a copied project}
+For a complete independent example, copy the whole \texttt{ds18b20} folder. For a new driver project, copy the raw foundation rather than building against it. Every project owns its local IOC, vendor files and build configuration.
+
+For a GPIO change in this example:
+\begin{enumerate}
+\item Open \texttt{DS18B20.ioc}. Move the GPIO but preserve \texttt{ONE\_WIRE\_1}, open-drain output, initial high/released level, no internal pull and high speed.
+\item Preserve correct clock/SWD settings. In Project Manager, keep user code, copy vendor files locally, use MDK-ARM V5 and the DS18B20 project name. Generate into the same project folder \cite{cubemx}.
+\item Check that the three application calls above still exist in USER CODE. Application and Libraries are separate from generated Core.
+\item Run the following commands, then build Keil and download the new firmware too.
+\end{enumerate}
+\begin{lstlisting}[language={},numbers=none]
+python tools/sync_keil.py
+python tools/check_project.py
+python tests/run_tests.py
+pio run -e stm32f107vc_jlink -e stm32f107vc_stlink
+\end{lstlisting}
+The post-generation batch hook tries to synchronize/check automatically. Run the commands manually if Python is missing from CubeMX's environment. Synchronization adds the application, adapter and portable sources to Keil; a generated project file alone does not automatically know about every hand-written C file.
+
+\checkpoint{\textbf{Pin-transfer check already performed:} a disposable copy moved PB10 to PB11, regenerated and built in both toolchains without editing GPIO literals in the adapter. The delivered example remains PB10.}
+
+\subsection{Step 8: follow the sensor transaction without reading all the code}
+Imagine asking the sensor two questions: ``Please measure now,'' then ``What was the result?'' Both begin with a reset that gets the sensor's attention.
+\begin{enumerate}
+\item Reset and detect presence. Without a response, return no-device.
+\item Send \texttt{0xCC}: use the only sensor on the wire. Send \texttt{0x44}: start a temperature conversion.
+\item Poll until conversion completes, waiting between busy polls. Stop waiting when the driver's budget is exhausted.
+\item Reset again. Send \texttt{0xCC} and \texttt{0xBE}: read the scratchpad, the sensor's nine-byte result area.
+\item Verify the check byte, decode the temperature and return OK. On a failure, leave the caller's temperature unchanged.
+\end{enumerate}
+The \texttt{0xCC} command is why one sensor is required. With multiple sensors they respond together; this version does not count or individually address them. External VDD allows polling during conversion; parasite power needs a different electrical arrangement.
+
+The temperature uses the first two scratchpad bytes, low byte first. For bytes \texttt{91 01}, the value is \texttt{0x0191}, or 401. Each raw unit is 1/16 degree, so 401/16 = 25.0625 Celsius. A negative example, \texttt{FF5E}, decodes to -162/16 = -10.125 Celsius.
+
+CRC is a check against corrupted bytes. The driver also checks fixed bytes: nine zeros happen to have a valid zero CRC, so CRC alone would accept a stuck-low bus. Resolution controls how many low bits are meaningful; the driver masks undefined bits before converting to Celsius. A valid 85 Celsius is accepted because it can be a real temperature. Repeated implausible 85 needs power/timing investigation.
+
+\subsection{Step 9: read the portable function, one block at a time}
+This is the entire temperature operation. Its C file has no MCU header:
+\lstinputlisting{../../ds18b20/Libraries/DS18B20/Src/ds18b20.c}
+The first block checks pointers and callbacks. The next starts conversion. The while loop waits with a finite budget. The second reset starts the result read. The for loop collects nine bytes. CRC and fixed-byte checks reject bad data. The last lines assemble the two bytes, handle negative values, check range and write Celsius to the caller.
+
+The 800 nominal millisecond waits are not a wall-clock deadline. Slots, interrupts and HAL tick rounding add overhead; this example can take around 1.7 s on a stuck-busy timeout. It is a blocking call: the foreground waits, while interrupts can still run between timing-critical portions. Do not call it from an ISR or with interrupts disabled.
+
+\subsection{Step 10: understand the adapter when you want to port it}
+A callback is an ordinary function whose address is given to another function. Instead of including STM32 registers in the portable library, we give it functions meaning ``pull low,'' ``release,'' ``read,'' and ``wait.'' The adapter supplies them.
+\begin{lstlisting}
+/* Inside the STM32 adapter: */
+static void low(void *context)
+{
+    (void)context;
+    ONE_WIRE_1_GPIO_Port->BRR = ONE_WIRE_1_Pin;
+}
+\end{lstlisting}
+\texttt{static} keeps this helper private to its C file. The unused \texttt{context} parameter is available for another board to pass a port/pin object; this fixed-pin example does not need it. The GPIO macro comes from CubeMX, which is why pin moves do not require editing this function.
+
+The seven supplied functions have distinct jobs: drive low, release, read high/low, delay in microseconds, save/mask interrupts, restore interrupts, and delay in milliseconds. The bus binding stores their function addresses:
+\par\noindent\begin{minipage}{\linewidth}
+\lstinputlisting[firstline=43,lastline=60]{../../ds18b20/Application/Src/ds18b20_stm32.c}
+\end{minipage}\par
+The DWT cycle counter implements short delays: at 72 MHz a microsecond is 72 cycles. HAL implements millisecond waits. The critical callbacks restore the saved interrupt state instead of blindly enabling interrupts.
+
+The wire layer sends bytes least-significant bit first. Reset requests 480 microseconds low and samples presence 70 microseconds after release. A write-one requests 6 low/64 released; a write-zero 60 low/10 released. A read requests 3 low, 10 after release before sampling, then 53 recovery. GPIO/call overhead must be measured on the actual board. Reset masks interrupts for about 550 microseconds plus overhead, so a system with tighter deadlines needs another timing design.
+
+For an MCU other than this STM32F107, rewrite the adapter and measure timings; keep the portable C files. To extend the API with multiple sensors or asynchronous conversion, first define the behavior and test it. Those features are intentionally outside this first lesson.
+
+\subsection{Step 11: record what the board actually proved}
+The owner reports downloading/running the earlier firmware in Keil and observing temperature at a breakpoint. This is useful initial hardware feedback. It does not yet prove continuous refresh, temperature accuracy, disconnect recovery or measured 1-Wire timing. The corrected live-session setup must be retried on the target.
+
+Record these checks separately:
+\begin{enumerate}
+\item Live refresh on: successes increase without transaction breakpoints.
+\item Warm/cool: successive successful readings follow the sensor.
+\item Disconnect/reconnect: an error invalidates the result; reconnection recovers.
+\item Compare with a reference thermometer and inspect DQ under real interrupt load.
+\item Record firmware, supply, crystal, resistor, cable, probe, samples and waveforms.
+\end{enumerate}
+Put actual observations in PROJECT\_STATUS.md. Builds and emulated tests are software evidence; board acceptance needs the observations above. The three C suites use Python Unicorn and PlatformIO's ARM GCC.
